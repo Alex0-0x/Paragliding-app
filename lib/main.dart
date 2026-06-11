@@ -184,11 +184,6 @@ class _MyHomePageState extends State<MyHomePage> {
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text("Getting location..."),
-              SizedBox(height: 12),
-              Text(
-                "We need your location to show nearby points and center the map.",
-                textAlign: TextAlign.center,
-              ),
             ],
           ),
         ),
@@ -221,6 +216,14 @@ class _MyHomePageState extends State<MyHomePage> {
                   errorMessage,
                   textAlign: TextAlign.center,
                 ),
+                if (errorMessage.toLowerCase().contains('denied') ||
+                    errorMessage.toLowerCase().contains('disabled')) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Please enable GPS access so we can center the map and sort points by distance.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: _startLocationTracking,
