@@ -1,25 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
-class PointDetail {
-  final String id;
-  final String title;
-  final String description;
-  final LatLng location;
-  final Color color;
-
-  const PointDetail({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.location,
-    required this.color,
-  });
-}
+import 'point_detail.dart';
+import 'map_view.dart';
+import 'point_detail_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -68,8 +55,11 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0;
-  Future<Position>? _positionFuture;
+  Position? _currentPosition;
+  StreamSubscription<Position>? _positionStreamSubscription;
   bool _permissionRationaleShown = false;
+  bool _waitingForLocation = true;
+  Object? _locationError;
 
   final List<PointDetail> points = const [
     PointDetail(
@@ -100,14 +90,12 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          _positionFuture = _loadPosition();
-        });
+        _startLocationTracking();
       }
     });
   }
 
-  Future<Position> _loadPosition() async {
+  Future<void> _startLocationTracking() async {
     if (!_permissionRationaleShown) {
       _permissionRationaleShown = true;
       await showDialog<void>(
@@ -130,119 +118,164 @@ class _MyHomePageState extends State<MyHomePage> {
         },
       );
     }
-    return getCurrentLocation();
+
+    setState(() {
+      _waitingForLocation = true;
+      _locationError = null;
+    });
+
+    try {
+      final initialPosition = await getCurrentLocation();
+      if (!mounted) return;
+
+      setState(() {
+        _currentPosition = initialPosition;
+        _waitingForLocation = false;
+        _locationError = null;
+      });
+
+      _positionStreamSubscription?.cancel();
+      _positionStreamSubscription = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 10,
+        ),
+      ).listen(
+        (position) {
+          if (!mounted) return;
+          setState(() {
+            _currentPosition = position;
+            _locationError = null;
+          });
+        },
+        onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _locationError = error;
+          });
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _currentPosition = null;
+        _waitingForLocation = false;
+        _locationError = error;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionStreamSubscription?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<Position>(
-        future: _positionFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting || _positionFuture == null) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text("Getting location..."),
-                  SizedBox(height: 12),
-                  Text(
-                    "We need your location to show nearby points and center the map.",
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+    if (_waitingForLocation || (_currentPosition == null && _locationError == null)) {
+      return Scaffold(
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text("Getting location..."),
+              SizedBox(height: 12),
+              Text(
+                "We need your location to show nearby points and center the map.",
+                textAlign: TextAlign.center,
               ),
-            );
-          }
+            ],
+          ),
+        ),
+      );
+    }
 
-          if (snapshot.hasError) {
-            final errorMessage = snapshot.error?.toString() ?? 'Unable to access location.';
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
+    if (_locationError != null) {
+      final errorMessage = _locationError?.toString() ?? 'Unable to access location.';
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.gps_off,
+                  size: 72,
+                  color: Colors.orange,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'GPS is unavailable',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  errorMessage,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _startLocationTracking,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry location'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final position = _currentPosition!;
+    final sortedPoints = [...points]
+      ..sort((a, b) {
+        final distanceA = _distanceFromCurrent(a, position);
+        final distanceB = _distanceFromCurrent(b, position);
+        return distanceA.compareTo(distanceB);
+      });
+
+    return Scaffold(
+      body: OrientationBuilder(
+        builder: (context, orientation) {
+          return orientation == Orientation.portrait
+              ? Column(
                   children: [
-                    const Icon(
-                      Icons.gps_off,
-                      size: 72,
-                      color: Colors.orange,
+                    Expanded(
+                      flex: 2,
+                      child: MapView(
+                        points: sortedPoints,
+                        currentPosition: position,
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'GPS is unavailable',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      errorMessage,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _positionFuture = getCurrentLocation();
-                        });
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry location'),
+                    Expanded(
+                      flex: 1,
+                      child: _buildPointList(sortedPoints, position),
                     ),
                   ],
-                ),
-              ),
-            );
-          }
-
-          final position = snapshot.data!;
-          final sortedPoints = [...points]
-            ..sort((a, b) {
-              final distanceA = _distanceFromCurrent(a, position);
-              final distanceB = _distanceFromCurrent(b, position);
-              return distanceA.compareTo(distanceB);
-            });
-
-          return OrientationBuilder(
-            builder: (context, orientation) {
-              return orientation == Orientation.portrait
-                  ? Column(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: MapView(
-                            points: sortedPoints,
-                            currentPosition: position,
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: _buildPointList(sortedPoints, position),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: MapView(
-                            points: sortedPoints,
-                            currentPosition: position,
-                          ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: _buildPointList(sortedPoints, position),
-                        ),
-                      ],
-                    );
-            },
-          );
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: MapView(
+                        points: sortedPoints,
+                        currentPosition: position,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: _buildPointList(sortedPoints, position),
+                    ),
+                  ],
+                );
         },
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -318,100 +351,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class PointDetailPage extends StatelessWidget {
-  final PointDetail point;
-
-  const PointDetailPage({super.key, required this.point});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(point.title),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                point.title,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                point.description,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 220,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: point.location,
-                    initialZoom: 13,
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.none,
-
-                    ),
-                  ),
-                  children: [
-                    openSteetMapTileLayer,
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: point.location,
-                          width: 60,
-                          height: 60,
-                          child: const Icon(
-                            Icons.location_on,
-                            size: 40,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Coordinates',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Latitude: ${point.location.latitude.toStringAsFixed(5)}'),
-                      Text('Longitude: ${point.location.longitude.toStringAsFixed(5)}'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Back to points'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-TileLayer get openSteetMapTileLayer => TileLayer(
-  urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  userAgentPackageName: 'dk.dev.paragliding_app',
-);
-
 Future<Position> getCurrentLocation() async {
   bool serviceEnabled;
   LocationPermission permission;
@@ -459,101 +398,3 @@ Future<Position> getCurrentLocation() async {
   }
 }
 
-class MapView extends StatefulWidget {
-  final List<PointDetail> points;
-  final Position currentPosition;
-
-  const MapView({
-    super.key,
-    required this.points,
-    required this.currentPosition,
-  });
-
-  @override
-  _MapViewState createState() => _MapViewState();
-}
-
-class _MapViewState extends State<MapView> {
-  final MapController _mapController = MapController();
-
-  void _openPointDetails(PointDetail point) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PointDetailPage(point: point),
-      ),
-    );
-  }
-
-  void _recenterMap() {
-    _mapController.move(
-      LatLng(
-        widget.currentPosition.latitude,
-        widget.currentPosition.longitude,
-      ),
-      13,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: LatLng(
-              widget.currentPosition.latitude,
-              widget.currentPosition.longitude,
-            ),
-            initialZoom: 11,
-          ),
-          children: [
-            openSteetMapTileLayer,
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: LatLng(
-                    widget.currentPosition.latitude,
-                    widget.currentPosition.longitude,
-                  ),
-                  width: 60,
-                  height: 60,
-                  child: const Icon(
-                    Icons.my_location,
-                    size: 40,
-                    color: Colors.blue,
-                  ),
-                ),
-                ...widget.points.map(
-                  (point) => Marker(
-                    point: point.location,
-                    width: 60,
-                    height: 60,
-                    child: GestureDetector(
-                      onTap: () => _openPointDetails(point),
-                      child: Icon(
-                        Icons.location_on,
-                        size: 40,
-                        color: point.color,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton(
-            mini: true,
-            onPressed: _recenterMap,
-            child: const Icon(Icons.my_location),
-          ),
-        ),
-      ],
-    );
-  }
-}
