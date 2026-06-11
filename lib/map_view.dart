@@ -27,18 +27,13 @@ class MapViewState extends State<MapView> {
   void _openPointDetails(PointDetail point) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => PointDetailPage(point: point),
-      ),
+      MaterialPageRoute(builder: (context) => PointDetailPage(point: point)),
     );
   }
 
   void _recenterMap() {
     _mapController.move(
-      LatLng(
-        widget.currentPosition.latitude,
-        widget.currentPosition.longitude,
-      ),
+      LatLng(widget.currentPosition.latitude, widget.currentPosition.longitude),
       13,
     );
   }

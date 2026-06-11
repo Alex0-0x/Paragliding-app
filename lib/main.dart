@@ -7,6 +7,13 @@ import 'package:geolocator/geolocator.dart';
 import 'point_detail.dart';
 import 'map_view.dart';
 import 'point_detail_page.dart';
+import 'api_service.dart';
+import 'favorites_service.dart';
+import 'favorites_list_page.dart';
+import 'pages/login_page.dart';
+import 'pages/events_list_page.dart';
+import 'models/user.dart';
+import 'services/user_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,7 +46,6 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
       ),
       home: const MyHomePage(title: 'Paragliding App'),
-
     );
   }
 }
@@ -60,39 +66,65 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _permissionRationaleShown = false;
   bool _waitingForLocation = true;
   Object? _locationError;
+  User? _currentUser;
+  bool _checkingAuth = true;
 
-  final List<PointDetail> points = const [
-    PointDetail(
-      id: '1',
-      title: 'Point 1',
-      description: 'High launch site with good wind shelter.',
-      location: LatLng(55.6761, 12.5683),
-      color: Colors.blue,
-    ),
-    PointDetail(
-      id: '2',
-      title: 'Point 2',
-      description: 'Open ridge with scenic landing area.',
-      location: LatLng(55.6838, 12.5710),
-      color: Colors.red,
-    ),
-    PointDetail(
-      id: '3',
-      title: 'Point 3',
-      description: 'Calm valley spot for beginners.',
-      location: LatLng(55.6715, 12.5652),
-      color: Colors.green,
-    ),
-  ];
+  List<PointDetail> _points = [];
+
+  Future<void> _fetchPoints() async {
+    try {
+      final spots = await ApiService.fetchParaSpots();
+      final favorites = await FavoritesService.loadFavorites();
+
+      // Mark points as favorited based on saved favorites
+      final pointsWithFavorites = spots.map((point) {
+        return point.copyWith(isFavorited: favorites.contains(point.id));
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _points = pointsWithFavorites;
+      });
+    } catch (e) {
+      // ignore fetch errors for now; user can retry by restarting or reloading
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _checkUserAuth();
+  }
+
+  Future<void> _checkUserAuth() async {
+    try {
+      final user = await UserService.getCurrentUser();
       if (mounted) {
-        _startLocationTracking();
+        setState(() {
+          _currentUser = user;
+          _checkingAuth = false;
+        });
+
+        // Start location tracking regardless of login status
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _startLocationTracking();
+          }
+        });
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checkingAuth = false;
+        });
+        // Start location tracking even if auth check fails
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _startLocationTracking();
+          }
+        });
+      }
+    }
   }
 
   Future<void> _startLocationTracking() async {
@@ -119,13 +151,22 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     }
 
+    if (!mounted) return;
+
     setState(() {
       _waitingForLocation = true;
       _locationError = null;
     });
 
     try {
-      final initialPosition = await getCurrentLocation();
+      // Add overall timeout of 30 seconds
+      final initialPosition = await getCurrentLocation().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () async {
+          throw Exception('Location request timed out. GPS may be disabled.');
+        },
+      );
+
       if (!mounted) return;
 
       setState(() {
@@ -134,27 +175,30 @@ class _MyHomePageState extends State<MyHomePage> {
         _locationError = null;
       });
 
+      await _fetchPoints();
+
       _positionStreamSubscription?.cancel();
-      _positionStreamSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 10,
-        ),
-      ).listen(
-        (position) {
-          if (!mounted) return;
-          setState(() {
-            _currentPosition = position;
-            _locationError = null;
-          });
-        },
-        onError: (error) {
-          if (!mounted) return;
-          setState(() {
-            _locationError = error;
-          });
-        },
-      );
+      _positionStreamSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 10,
+            ),
+          ).listen(
+            (position) {
+              if (!mounted) return;
+              setState(() {
+                _currentPosition = position;
+                _locationError = null;
+              });
+            },
+            onError: (error) {
+              if (!mounted) return;
+              setState(() {
+                _locationError = error;
+              });
+            },
+          );
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -173,7 +217,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_waitingForLocation || (_currentPosition == null && _locationError == null)) {
+    if (_checkingAuth) {
+      return Scaffold(body: const Center(child: CircularProgressIndicator()));
+    }
+
+    if (_waitingForLocation ||
+        (_currentPosition == null && _locationError == null)) {
       return Scaffold(
         body: const Center(
           child: Column(
@@ -191,7 +240,8 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     if (_locationError != null) {
-      final errorMessage = _locationError?.toString() ?? 'Unable to access location.';
+      final errorMessage =
+          _locationError?.toString() ?? 'Unable to access location.';
       return Scaffold(
         body: Center(
           child: Padding(
@@ -200,11 +250,7 @@ class _MyHomePageState extends State<MyHomePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.gps_off,
-                  size: 72,
-                  color: Colors.orange,
-                ),
+                const Icon(Icons.gps_off, size: 72, color: Colors.orange),
                 const SizedBox(height: 16),
                 Text(
                   'GPS is unavailable',
@@ -212,10 +258,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  errorMessage,
-                  textAlign: TextAlign.center,
-                ),
+                Text(errorMessage, textAlign: TextAlign.center),
                 if (errorMessage.toLowerCase().contains('denied') ||
                     errorMessage.toLowerCase().contains('disabled')) ...[
                   const SizedBox(height: 12),
@@ -238,7 +281,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     final position = _currentPosition!;
-    final sortedPoints = [...points]
+    final sortedPoints = [..._points]
       ..sort((a, b) {
         final distanceA = _distanceFromCurrent(a, position);
         final distanceB = _distanceFromCurrent(b, position);
@@ -246,41 +289,60 @@ class _MyHomePageState extends State<MyHomePage> {
       });
 
     return Scaffold(
-      body: OrientationBuilder(
-        builder: (context, orientation) {
-          return orientation == Orientation.portrait
-              ? Column(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: MapView(
-                        points: sortedPoints,
-                        currentPosition: position,
+      appBar: AppBar(
+        title: const Text('Paragliding App'),
+        actions: [
+          if (_currentUser != null)
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'logout') {
+                  await UserService.logout();
+                  setState(() {
+                    _currentUser = null;
+                  });
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                PopupMenuItem(
+                  value: 'user',
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Logged in as'),
+                      Text(
+                        _currentUser?.username ?? 'User',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    Expanded(
-                      flex: 1,
-                      child: _buildPointList(sortedPoints, position),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: MapView(
-                        points: sortedPoints,
-                        currentPosition: position,
-                      ),
-                    ),
-                    Expanded(
-                      flex: 1,
-                      child: _buildPointList(sortedPoints, position),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'logout', child: Text('Logout')),
+              ],
+            )
+          else
+            TextButton(
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
                 );
-        },
+                if (result == true) {
+                  final user = await UserService.getCurrentUser();
+                  setState(() {
+                    _currentUser = user;
+                  });
+                }
+              },
+              child: const Text(
+                'Log In',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+        ],
       ),
+      body: _buildBody(sortedPoints, position),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -288,15 +350,11 @@ class _MyHomePageState extends State<MyHomePage> {
             _selectedIndex = index;
           });
         },
+        type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Map',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: 'Points',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
+          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Favorites'),
+          BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Events'),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Settings',
@@ -306,15 +364,69 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildPointList(List<PointDetail> sortedPoints, Position currentPosition) {
+  Widget _buildBody(List<PointDetail> sortedPoints, Position position) {
+    switch (_selectedIndex) {
+      case 0:
+        return OrientationBuilder(
+          builder: (context, orientation) {
+            return orientation == Orientation.portrait
+                ? Column(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: MapView(
+                          points: sortedPoints,
+                          currentPosition: position,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: _buildPointList(sortedPoints, position),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: MapView(
+                          points: sortedPoints,
+                          currentPosition: position,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: _buildPointList(sortedPoints, position),
+                      ),
+                    ],
+                  );
+          },
+        );
+      case 1:
+        return FavoritesListPage(
+          points: sortedPoints,
+          currentPosition: position,
+        );
+      case 2:
+        return EventsListPage(currentPosition: position);
+      case 3:
+        return const Center(child: Text('Settings page coming soon'));
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildPointList(
+    List<PointDetail> sortedPoints,
+    Position currentPosition,
+  ) {
     return ListView.builder(
       itemCount: sortedPoints.length,
       itemBuilder: (context, index) {
         final point = sortedPoints[index];
         final distance = _distanceFromCurrent(point, currentPosition);
         return Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
           child: Card(
             color: point.color.withAlpha(41),
             shape: RoundedRectangleBorder(
@@ -336,7 +448,31 @@ class _MyHomePageState extends State<MyHomePage> {
                   '${point.description}\n${(distance / 1000).toStringAsFixed(1)} km away',
                 ),
                 isThreeLine: true,
-                trailing: const Icon(Icons.chevron_right),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        point.isFavorited ? Icons.star : Icons.star_border,
+                        color: point.isFavorited ? Colors.amber : Colors.grey,
+                      ),
+                      onPressed: () async {
+                        await FavoritesService.toggleFavorite(point.id);
+                        setState(() {
+                          final pointIndex = _points.indexWhere(
+                            (p) => p.id == point.id,
+                          );
+                          if (pointIndex != -1) {
+                            _points[pointIndex] = _points[pointIndex].copyWith(
+                              isFavorited: !_points[pointIndex].isFavorited,
+                            );
+                          }
+                        });
+                      },
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
               ),
             ),
           ),
@@ -394,10 +530,11 @@ Future<Position> getCurrentLocation() async {
       },
     );
   } on TimeoutException catch (error) {
-    return Future.error(error.message ??
-        'Location request timed out. Please enable GPS or try again.');
+    return Future.error(
+      error.message ??
+          'Location request timed out. Please enable GPS or try again.',
+    );
   } catch (error) {
     return Future.error('Unable to get current location: $error');
   }
 }
-
