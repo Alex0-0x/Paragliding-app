@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
-import 'map_tiles.dart';
-import 'point_detail.dart';
-import 'favorites_service.dart';
-import 'services/event_service.dart';
-import 'services/user_service.dart';
-import 'models/user.dart';
-import 'models/event.dart';
-import 'pages/login_page.dart';
+import '../map_tiles.dart';
+import '../models/point_detail.dart';
+import '../favorites_service.dart';
+import '../services/event_service.dart';
+import '../services/user_service.dart';
+import '../models/user.dart';
+import '../models/event.dart';
+import 'login_page.dart';
 
 class PointDetailPage extends StatefulWidget {
   final PointDetail point;
@@ -81,6 +83,29 @@ class _PointDetailPageState extends State<PointDetailPage> {
         },
       ),
     );
+  }
+
+  Future<void> _giveDirection() async {
+    final latitude = widget.point.location.latitude;
+    final longitude = widget.point.location.longitude;
+    Uri uri;
+    if (Platform.isAndroid) {
+      uri = Uri.parse(
+        'google.navigation:q=$latitude,$longitude&mode=d',
+      );
+    } else if (Platform.isIOS) {
+      uri = Uri.parse(
+        'http://maps.apple.com/?daddr=$latitude,$longitude&dirflg=d',
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Directions not supported on this platform'),
+        ),
+      );
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -170,6 +195,12 @@ class _PointDetailPageState extends State<PointDetailPage> {
                 onPressed: _showCreateEventDialog,
                 icon: const Icon(Icons.event),
                 label: const Text('Create Event'),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _giveDirection,
+                icon: const Icon(Icons.directions),
+                label: const Text('Get Directions'),
               ),
               const SizedBox(height: 24),
               Text(

@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
-import 'point_detail.dart';
+import 'models/point_detail.dart';
 import 'map_view.dart';
-import 'point_detail_page.dart';
+import 'pages/point_detail_page.dart';
 import 'api_service.dart';
 import 'favorites_service.dart';
 import 'favorites_list_page.dart';
 import 'pages/login_page.dart';
 import 'pages/events_list_page.dart';
+import 'pages/settings_page.dart';
 import 'models/user.dart';
 import 'services/user_service.dart';
 
@@ -410,7 +411,27 @@ class _MyHomePageState extends State<MyHomePage> {
       case 2:
         return EventsListPage(currentPosition: position);
       case 3:
-        return const Center(child: Text('Settings page coming soon'));
+        return SettingsPage(
+          currentUser: _currentUser,
+          onLogin: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginPage()),
+            );
+            if (result == true) {
+              final user = await UserService.getCurrentUser();
+              setState(() {
+                _currentUser = user;
+              });
+            }
+          },
+          onLogout: () async {
+            await UserService.logout();
+            setState(() {
+              _currentUser = null;
+            });
+          },
+        );
       default:
         return const SizedBox.shrink();
     }
