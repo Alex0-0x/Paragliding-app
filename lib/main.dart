@@ -7,9 +7,9 @@ import 'package:geolocator/geolocator.dart';
 import 'models/point_detail.dart';
 import 'map_view.dart';
 import 'pages/point_detail_page.dart';
-import 'api_service.dart';
-import 'favorites_service.dart';
-import 'favorites_list_page.dart';
+import 'services/api_service.dart';
+import 'services/favorites_service.dart';
+import 'pages/favorites_list_page.dart';
 import 'pages/login_page.dart';
 import 'pages/events_list_page.dart';
 import 'pages/settings_page.dart';
@@ -64,7 +64,6 @@ class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStreamSubscription;
-  bool _permissionRationaleShown = false;
   bool _waitingForLocation = true;
   Object? _locationError;
   User? _currentUser;
@@ -129,28 +128,28 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _startLocationTracking() async {
-    if (!_permissionRationaleShown) {
-      _permissionRationaleShown = true;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Location permission needed'),
-            content: const Text(
-              'This app uses your location to sort points by distance and to center the map on your current position. '
-              'Please allow location access when prompted.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-    }
+    // if (!_permissionRationaleShown) {
+    //   _permissionRationaleShown = true;
+    //   await showDialog<void>(
+    //     context: context,
+    //     barrierDismissible: false,
+    //     builder: (context) {
+    //       return AlertDialog(
+    //         title: const Text('Location permission needed'),
+    //         content: const Text(
+    //           'This app uses your location to sort points by distance and to center the map on your current position. '
+    //           'Please allow location access when prompted.',
+    //         ),
+    //         actions: [
+    //           TextButton(
+    //             onPressed: () => Navigator.of(context).pop(),
+    //             child: const Text('OK'),
+    //           ),
+    //         ],
+    //       );
+    //     },
+    //   );
+    // }
 
     if (!mounted) return;
 

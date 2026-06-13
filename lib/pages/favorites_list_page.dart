@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'models/point_detail.dart';
-import 'pages/point_detail_page.dart';
-import 'favorites_service.dart';
+import '../models/point_detail.dart';
+import 'point_detail_page.dart';
+import '../services/favorites_service.dart';
 
 class FavoritesListPage extends StatelessWidget {
   final List<PointDetail> points;

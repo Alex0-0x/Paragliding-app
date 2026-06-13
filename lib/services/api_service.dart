@@ -4,46 +4,12 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 
-import 'models/point_detail.dart';
+import '../models/point_detail.dart';
 
 class ApiService {
-  // Adjust this base URL to point at your API server. Use 10.0.2.2 for Android emulator.
   static const String defaultBaseUrl = 'https://10.0.2.2:7095';
-  static const List<String> _devFallbacks = ['http://10.0.2.2:5022', 'https://10.0.2.2:7095'];
+  static const List<String> _devFallbacks = ['http://10.0.2.2:5022'];
 
-  // When enabled, local development spots are returned if the API is unavailable.
-  static const bool useTemporaryDevSpots = true;
-
-  static List<PointDetail> get temporaryDevSpots => [
-        PointDetail(
-          id: 'dev-1',
-          title: 'Windy Ridge',
-          description: 'A beginner-friendly launch site with gentle thermals.',
-          location: LatLng(55.6761, 12.5683),
-          color: Colors.green,
-        ),
-        PointDetail(
-          id: 'dev-2',
-          title: 'Eagle Point',
-          description: 'High visibility and long glide distance to the landing zone.',
-          location: LatLng(55.6861, 12.5483),
-          color: Colors.blue,
-        ),
-        PointDetail(
-          id: 'dev-3',
-          title: 'Sunset Bluff',
-          description: 'Popular spot for sunset flights and easy access.',
-          location: LatLng(55.6661, 12.5783),
-          color: Colors.orange,
-        ),
-        PointDetail(
-          id: 'dev-4',
-          title: 'Falcon Meadow',
-          description: 'Open field launch with nearby amenities.',
-          location: LatLng(55.6561, 12.5883),
-          color: Colors.purple,
-        ),
-      ];
 
   static Future<List<PointDetail>> fetchParaSpots({String? baseUrl}) async {
     final candidates = <String>[];
@@ -83,7 +49,7 @@ class ApiService {
                   safty,
                 ].where((s) => s != null && s.toString().isNotEmpty).join('\n'),
                 location: LatLng(lat, lng),
-                color: Colors.green,
+                color: Colors.orange, // Default color for API spots
               );
             })
             .toList(growable: false);
@@ -91,10 +57,6 @@ class ApiService {
         lastError = Exception('Error fetching from $candidate: $e');
         continue;
       }
-    }
-
-    if (useTemporaryDevSpots) {
-      return temporaryDevSpots;
     }
 
     throw lastError ?? Exception('Failed to fetch para spots (no candidates)');

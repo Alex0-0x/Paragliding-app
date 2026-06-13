@@ -5,7 +5,7 @@ import 'dart:io';
 
 import '../map_tiles.dart';
 import '../models/point_detail.dart';
-import '../favorites_service.dart';
+import '../services/favorites_service.dart';
 import '../services/event_service.dart';
 import '../services/user_service.dart';
 import '../models/user.dart';
