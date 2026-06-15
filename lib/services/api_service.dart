@@ -54,7 +54,7 @@ class ApiService {
             })
             .toList(growable: false);
       } catch (e) {
-        lastError = Exception('Error fetching from $candidate: $e');
+        lastError = Exception('Error fetching from $candidate: $e'  );
         continue;
       }
     }

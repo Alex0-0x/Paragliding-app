@@ -128,28 +128,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _startLocationTracking() async {
-    // if (!_permissionRationaleShown) {
-    //   _permissionRationaleShown = true;
-    //   await showDialog<void>(
-    //     context: context,
-    //     barrierDismissible: false,
-    //     builder: (context) {
-    //       return AlertDialog(
-    //         title: const Text('Location permission needed'),
-    //         content: const Text(
-    //           'This app uses your location to sort points by distance and to center the map on your current position. '
-    //           'Please allow location access when prompted.',
-    //         ),
-    //         actions: [
-    //           TextButton(
-    //             onPressed: () => Navigator.of(context).pop(),
-    //             child: const Text('OK'),
-    //           ),
-    //         ],
-    //       );
-    //     },
-    //   );
-    // }
+
 
     if (!mounted) return;
 
@@ -440,6 +419,11 @@ class _MyHomePageState extends State<MyHomePage> {
     List<PointDetail> sortedPoints,
     Position currentPosition,
   ) {
+    if (sortedPoints.isEmpty) {
+      return const Center(
+        child: Text('Server Failed to Load Points. Please try again later.'),
+       );
+    }
     return ListView.builder(
       itemCount: sortedPoints.length,
       itemBuilder: (context, index) {
