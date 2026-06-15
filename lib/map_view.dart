@@ -3,8 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
-import 'point_detail.dart';
-import 'point_detail_page.dart';
+import 'models/point_detail.dart';
+import 'pages/point_detail_page.dart';
 import 'map_tiles.dart';
 
 class MapView extends StatefulWidget {
@@ -27,18 +27,13 @@ class MapViewState extends State<MapView> {
   void _openPointDetails(PointDetail point) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => PointDetailPage(point: point),
-      ),
+      MaterialPageRoute(builder: (context) => PointDetailPage(point: point)),
     );
   }
 
   void _recenterMap() {
     _mapController.move(
-      LatLng(
-        widget.currentPosition.latitude,
-        widget.currentPosition.longitude,
-      ),
+      LatLng(widget.currentPosition.latitude, widget.currentPosition.longitude),
       13,
     );
   }
