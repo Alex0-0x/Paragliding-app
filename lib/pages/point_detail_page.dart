@@ -11,6 +11,7 @@ import '../services/user_service.dart';
 import '../models/user.dart';
 import '../models/event.dart';
 import 'login_page.dart';
+import '../services/weather_service.dart';
 
 class PointDetailPage extends StatefulWidget {
   final PointDetail point;
@@ -25,6 +26,7 @@ class _PointDetailPageState extends State<PointDetailPage> {
   late bool _isFavorited;
   late Future<List<Event>> _eventsFuture;
   User? _currentUser;
+  late Future<WeatherData> _weatherFuture;
 
   @override
   void initState() {
@@ -32,6 +34,10 @@ class _PointDetailPageState extends State<PointDetailPage> {
     _isFavorited = widget.point.isFavorited;
     _eventsFuture = EventService.getEventsForSpot(widget.point.id);
     _loadCurrentUser();
+    _weatherFuture = WeatherService.getWeather(
+      widget.point.location.latitude,
+      widget.point.location.longitude,
+    );
   }
 
   Future<void> _loadCurrentUser() async {
@@ -168,6 +174,115 @@ class _PointDetailPageState extends State<PointDetailPage> {
                   ],
                 ),
               ),
+              FutureBuilder<WeatherData>(
+  future: _weatherFuture,
+  builder: (context, snapshot) {
+
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (snapshot.hasError) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text("Unable to load weather"),
+        ),
+      );
+    }
+
+    final weather = snapshot.data!;
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+
+            Row(
+              children: [
+
+                Image.network(
+                  weather.iconUrl,
+                  width: 64,
+                ),
+
+                const SizedBox(width: 16),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+
+                      Text(
+                        "${weather.temperature.toStringAsFixed(1)}°C",
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall,
+                      ),
+
+                      Text(weather.condition),
+
+                    ],
+                  ),
+                ),
+
+              ],
+            ),
+
+            const Divider(),
+
+            Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+              children: [
+
+                Text("💨 ${weather.windKph} km/h"),
+
+                Text(weather.windDirection),
+
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+              children: [
+
+                Text("🌬 Gust ${weather.gustKph} km/h"),
+
+                Text("💧 ${weather.humidity}%"),
+
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+              children: [
+
+                Text("Feels ${weather.feelsLike}°"),
+
+                Text("UV ${weather.uv}"),
+
+              ],
+            ),
+
+          ],
+        ),
+      ),
+    );
+  },
+),
+              
               const SizedBox(height: 24),
               Card(
                 child: Padding(
