@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 import 'dart:io';
 
 import '../map_tiles.dart';
@@ -26,7 +27,7 @@ class _PointDetailPageState extends State<PointDetailPage> {
   late bool _isFavorited;
   late Future<List<Event>> _eventsFuture;
   User? _currentUser;
-  late Future<WeatherData> _weatherFuture;
+  late Future<List<ForecastDay>> _forecastFuture;
 
   @override
   void initState() {
@@ -34,10 +35,10 @@ class _PointDetailPageState extends State<PointDetailPage> {
     _isFavorited = widget.point.isFavorited;
     _eventsFuture = EventService.getEventsForSpot(widget.point.id);
     _loadCurrentUser();
-    _weatherFuture = WeatherService.getWeather(
-      widget.point.location.latitude,
-      widget.point.location.longitude,
-    );
+    _forecastFuture = WeatherService.getForecast(
+  widget.point.location.latitude,
+  widget.point.location.longitude,
+);
   }
 
   Future<void> _loadCurrentUser() async {
@@ -174,115 +175,126 @@ class _PointDetailPageState extends State<PointDetailPage> {
                   ],
                 ),
               ),
-              FutureBuilder<WeatherData>(
-  future: _weatherFuture,
+              const SizedBox(height: 20),
+
+FutureBuilder<List<ForecastDay>>(
+  future: _forecastFuture,
   builder: (context, snapshot) {
 
-    if (snapshot.connectionState == ConnectionState.waiting) {
+    if (snapshot.connectionState ==
+        ConnectionState.waiting) {
       return const Center(
         child: CircularProgressIndicator(),
       );
     }
 
+
     if (snapshot.hasError) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: Text("Unable to load weather"),
+          child: Text(
+            "Unable to load forecast",
+          ),
         ),
       );
     }
 
-    final weather = snapshot.data!;
 
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
+    final forecast = snapshot.data!;
 
-            Row(
-              children: [
 
-                Image.network(
-                  weather.iconUrl,
-                  width: 64,
-                ),
+    return Column(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
 
-                const SizedBox(width: 16),
+        Text(
+          "3 Day Forecast",
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
 
-                Expanded(
-                  child: Column(
+
+        const SizedBox(height: 12),
+
+
+        ...forecast.map(
+          (day) => Card(
+            child: Padding(
+              padding:
+                  const EdgeInsets.all(12),
+              child: Row(
+                children: [
+
+                  Image.network(
+                    day.iconUrl,
+                    width: 50,
+                  ),
+
+
+                  const SizedBox(width: 12),
+
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+
+                        Text(
+                          "${day.date.day}/${day.date.month}",
+                          style: const TextStyle(
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+
+                        Text(day.condition),
+
+                        Text(
+                          "${day.minTemp}° - ${day.maxTemp}°C",
+                        ),
+
+                      ],
+                    ),
+                  ),
+
+
+                  Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                        CrossAxisAlignment.end,
                     children: [
 
                       Text(
-                        "${weather.temperature.toStringAsFixed(1)}°C",
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall,
+                        "💨 ${day.windSpeed} km/h",
                       ),
 
-                      Text(weather.condition),
+                      Text(
+                        day.windDirection,
+                      ),
+
+                      Text(
+                        "🌧 ${day.rainChance}%",
+                      ),
 
                     ],
                   ),
-                ),
 
-              ],
+                ],
+              ),
             ),
-
-            const Divider(),
-
-            Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
-              children: [
-
-                Text("💨 ${weather.windKph} km/h"),
-
-                Text(weather.windDirection),
-
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
-              children: [
-
-                Text("🌬 Gust ${weather.gustKph} km/h"),
-
-                Text("💧 ${weather.humidity}%"),
-
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
-              children: [
-
-                Text("Feels ${weather.feelsLike}°"),
-
-                Text("UV ${weather.uv}"),
-
-              ],
-            ),
-
-          ],
+          ),
         ),
-      ),
+
+      ],
     );
   },
 ),
-              
               const SizedBox(height: 24),
               Card(
                 child: Padding(
