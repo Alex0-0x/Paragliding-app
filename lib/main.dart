@@ -128,8 +128,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _startLocationTracking() async {
-
-
     if (!mounted) return;
 
     setState(() {
@@ -422,66 +420,73 @@ class _MyHomePageState extends State<MyHomePage> {
     if (sortedPoints.isEmpty) {
       return const Center(
         child: Text('Server Failed to Load Points. Please try again later.'),
-       );
+      );
     }
-    return ListView.builder(
-      itemCount: sortedPoints.length,
-      itemBuilder: (context, index) {
-        final point = sortedPoints[index];
-        final distance = _distanceFromCurrent(point, currentPosition);
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-          child: Card(
-            color: point.color.withAlpha(41),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PointDetailPage(point: point),
-                  ),
-                );
-              },
-              child: ListTile(
-                title: Text(point.title),
-                subtitle: Text(
-                  '${point.description}\n${(distance / 1000).toStringAsFixed(1)} km away',
-                ),
-                isThreeLine: true,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        point.isFavorited ? Icons.star : Icons.star_border,
-                        color: point.isFavorited ? Colors.amber : Colors.grey,
-                      ),
-                      onPressed: () async {
-                        await FavoritesService.toggleFavorite(point.id);
-                        setState(() {
-                          final pointIndex = _points.indexWhere(
-                            (p) => p.id == point.id,
-                          );
-                          if (pointIndex != -1) {
-                            _points[pointIndex] = _points[pointIndex].copyWith(
-                              isFavorited: !_points[pointIndex].isFavorited,
-                            );
-                          }
-                        });
-                      },
+    return Scrollbar(
+      thumbVisibility: true,
+      thickness: 6.0,
+      radius: const Radius.circular(8.0),
+      child: ListView.builder(
+        itemCount: sortedPoints.length,
+        itemBuilder: (context, index) {
+          final point = sortedPoints[index];
+          final distance = _distanceFromCurrent(point, currentPosition);
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+            child: Card(
+              color: point.color.withAlpha(41),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PointDetailPage(point: point),
                     ),
-                    const Icon(Icons.chevron_right),
-                  ],
+                  );
+                },
+                child: ListTile(
+                  title: Text(point.title),
+                  subtitle: Text(
+                    '${point.description}\n${(distance / 1000).toStringAsFixed(1)} km away',
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          point.isFavorited ? Icons.star : Icons.star_border,
+                          color: point.isFavorited ? Colors.amber : Colors.grey,
+                        ),
+                        onPressed: () async {
+                          await FavoritesService.toggleFavorite(point.id);
+                          setState(() {
+                            final pointIndex = _points.indexWhere(
+                              (p) => p.id == point.id,
+                            );
+                            if (pointIndex != -1) {
+                              _points[pointIndex] = _points[pointIndex]
+                                  .copyWith(
+                                    isFavorited:
+                                        !_points[pointIndex].isFavorited,
+                                  );
+                            }
+                          });
+                        },
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

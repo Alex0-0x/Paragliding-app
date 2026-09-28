@@ -171,12 +171,6 @@ class SettingsPage extends StatelessWidget {
                         _showHelpDialog(context);
                       },
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.privacy_tip),
-                      title: const Text('Privacy Policy'),
-                      trailing: const Icon(Icons.open_in_new),
-                      onTap: () {},
-                    ),
                   ],
                 ),
               ),

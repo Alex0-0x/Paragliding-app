@@ -1,59 +1,100 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
 import '../models/event.dart';
+import 'user_service.dart';
 
 class EventService {
-  static const String _eventsKey = 'events';
+  static const String baseUrl = 'http://10.0.2.2:5022';
 
-  /// Get all events for a specific spot
-  static Future<List<Event>> getEventsForSpot(String spotId) async {
-    final allEvents = await getAllEvents();
-    return allEvents.where((e) => e.spotId == spotId).toList();
+  static const String eventsUrl = '$baseUrl/api/Event';
+
+  /// Get authentication headers
+  static Future<Map<String, String>> _headers() async {
+    final token = await UserService.getToken();
+
+    if (token == null) {
+      throw Exception('User is not logged in');
+    }
+
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
   }
 
   /// Get all events
   static Future<List<Event>> getAllEvents() async {
-    final prefs = await SharedPreferences.getInstance();
-    final eventsJson = prefs.getStringList(_eventsKey) ?? [];
-    return eventsJson.map((json) => Event.fromJson(jsonDecode(json))).toList();
+    final response = await http.get(
+      Uri.parse(eventsUrl),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 401) {
+      throw Exception('Unauthorized. Please login again.');
+    }
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load events: ${response.statusCode}',
+      );
+    }
+
+    final List<dynamic> data = jsonDecode(response.body);
+
+    return data
+        .map((json) => Event.fromJson(json))
+        .toList();
   }
 
-  /// Create a new event
+  /// Get events for a specific spot
+  static Future<List<Event>> getEventsForSpot(int spotId) async {
+    final events = await getAllEvents();
+
+    return events
+        .where((event) => event.spotId == spotId)
+        .toList();
+  }
+
+  /// Create event
   static Future<Event> createEvent({
-    required String spotId,
+    required int spotId,
     required String spotTitle,
     required String userId,
     required String username,
     required DateTime dateTime,
     required String description,
   }) async {
-    final event = Event(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      spotId: spotId,
-      spotTitle: spotTitle,
-      userId: userId,
-      username: username,
-      dateTime: dateTime,
-      description: description,
+    final eventData = 
+    {
+      'spotId': spotId, 
+      'userName': username, 
+      'paraSpotTitle': spotTitle, 
+      'startDate': dateTime.toIso8601String(), 
+      'description': description, 
+    };
+
+    final response = await http.post(
+      Uri.parse(eventsUrl),
+      headers: await _headers(),
+      body: jsonEncode(eventData),
     );
 
-    final allEvents = await getAllEvents();
-    allEvents.add(event);
+    if (response.statusCode == 401) {
+      throw Exception('Unauthorized. Please login again.');
+    }
 
-    final prefs = await SharedPreferences.getInstance();
-    final eventsJson = allEvents.map((e) => jsonEncode(e.toJson())).toList();
-    await prefs.setStringList(_eventsKey, eventsJson);
+    if (response.statusCode != 200 &&
+        response.statusCode != 201) {
+      throw Exception(
+        'Failed to create event: '
+        '${response.statusCode} ${response.body}',
+      );
+    }
 
-    return event;
-  }
-
-  /// Delete an event
-  static Future<void> deleteEvent(String eventId) async {
-    final allEvents = await getAllEvents();
-    allEvents.removeWhere((e) => e.id == eventId);
-
-    final prefs = await SharedPreferences.getInstance();
-    final eventsJson = allEvents.map((e) => jsonEncode(e.toJson())).toList();
-    await prefs.setStringList(_eventsKey, eventsJson);
+    return Event.fromJson(
+      jsonDecode(response.body),
+    );
   }
 }

@@ -1,73 +1,141 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/user.dart';
 
 class UserService {
+  // Android emulator -> localhost on your computer
+  static const String baseUrl = 'http://10.0.2.2:5022';
+
+
   static const String _userKey = 'current_user';
   static const String _tokenKey = 'auth_token';
 
-  /// Register a new user (mock implementation)
-  static Future<User> register({
+  /// Register a new user
+  static Future<void> register({
     required String username,
     required String email,
     required String password,
   }) async {
-    // In a real app, you'd send this to your backend
-    // For now, we'll create a mock user
-    final user = User(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      username: username,
-      email: email,
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/Identity/register'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'userName': username,
+        'email': email,
+        'password': password,
+      }),
     );
 
-    await _saveUser(user);
-    return user;
+    if (response.statusCode != 200) {
+      String message = 'Registration failed';
+
+      try {
+        final body = jsonDecode(response.body);
+        message = body.toString();
+      } catch (_) {}
+
+      throw Exception(message);
+    }
   }
 
-  /// Login user (mock implementation)
+  /// Login
   static Future<User> login({
     required String email,
     required String password,
   }) async {
-    // In a real app, you'd validate against your backend
-    // For now, we'll create a mock user based on email
-    final user = User(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      username: email.split('@').first,
-      email: email,
+    final response = await http.post(
+      Uri.parse('$baseUrl/login'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+      }),
     );
 
-    await _saveUser(user);
+    if (response.statusCode != 200) {
+      throw Exception('Invalid email or password');
+    }
+
+    final body = jsonDecode(response.body);
+
+    final token = body['accessToken'];
+
+    if (token == null) {
+      throw Exception('No access token returned from server');
+    }
+
+    // Decode JWT payload.
+    final parts = token.split('.');
+
+    if (parts.length != 3) {
+      throw Exception('Invalid JWT token');
+    }
+
+    final payload = jsonDecode(
+      utf8.decode(
+        base64Url.decode(
+          base64Url.normalize(parts[1]),
+        ),
+      ),
+    );
+
+    final userId = payload['sub'] ?? '';
+    final userEmail = payload['email'] ?? email;
+
+    final user = User(
+      id: userId,
+      username: payload['unique_name'] ?? '',
+      email: userEmail,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(_tokenKey, token);
+    await prefs.setString(
+      _userKey,
+      jsonEncode(user.toJson()),
+    );
+
     return user;
   }
 
-  /// Logout current user
-  static Future<void> logout() async {
+  /// Get stored JWT
+  static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userKey);
-    await prefs.remove(_tokenKey);
+    return prefs.getString(_tokenKey);
   }
 
   /// Get current logged-in user
   static Future<User?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
+
     final userJson = prefs.getString(_userKey);
-    if (userJson != null) {
-      final json = jsonDecode(userJson);
-      return User.fromJson(json);
+
+    if (userJson == null) {
+      return null;
     }
-    return null;
+
+    return User.fromJson(jsonDecode(userJson));
   }
 
-  /// Check if user is logged in
+  /// Check whether user is logged in
   static Future<bool> isLoggedIn() async {
-    final user = await getCurrentUser();
-    return user != null;
+    final token = await getToken();
+    return token != null && token.isNotEmpty;
   }
 
-  /// Save user to local storage
-  static Future<void> _saveUser(User user) async {
+  /// Logout
+  static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userKey, jsonEncode(user.toJson()));
+
+    await prefs.remove(_userKey);
+    await prefs.remove(_tokenKey);
   }
 }

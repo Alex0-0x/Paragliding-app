@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:intl/intl.dart';
 import 'dart:io';
 
 import '../map_tiles.dart';
@@ -29,11 +28,15 @@ class _PointDetailPageState extends State<PointDetailPage> {
   User? _currentUser;
   late Future<List<ForecastDay>> _forecastFuture;
 
+  int? get _spotId => int.tryParse(widget.point.id);
+
   @override
   void initState() {
     super.initState();
     _isFavorited = widget.point.isFavorited;
-    _eventsFuture = EventService.getEventsForSpot(widget.point.id);
+    _eventsFuture = _spotId == null
+        ? Future.value([])
+        : EventService.getEventsForSpot(_spotId!);
     _loadCurrentUser();
     _forecastFuture = WeatherService.getForecast(
   widget.point.location.latitude,
@@ -85,7 +88,7 @@ class _PointDetailPageState extends State<PointDetailPage> {
         currentUser: _currentUser,
         onEventCreated: () {
           setState(() {
-            _eventsFuture = EventService.getEventsForSpot(widget.point.id);
+            _eventsFuture = EventService.getEventsForSpot(_spotId!);
           });
         },
       ),
@@ -459,6 +462,14 @@ class _CreateEventDialogState extends State<CreateEventDialog> {
   Future<void> _createEvent() async {
     if (widget.currentUser == null) return;
 
+    final spotId = int.tryParse(widget.spot.id);
+    if (spotId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot create event for this spot.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -471,7 +482,7 @@ class _CreateEventDialogState extends State<CreateEventDialog> {
       );
 
       await EventService.createEvent(
-        spotId: widget.spot.id,
+        spotId: spotId,
         spotTitle: widget.spot.title,
         userId: widget.currentUser!.id,
         username: widget.currentUser!.username,
